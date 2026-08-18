@@ -1,11 +1,12 @@
 const express = require("express");
 
 const app = express();
+
 const PORT = process.env.PORT || 5000;
 
 app.get("/", (req, res) => {
-  res.json({
-    message: "Automated Cloud Deployment & DevOps Platform"
+  res.status(200).json({
+    message: "CloudOps Dashboard API"
   });
 });
 
@@ -16,11 +17,15 @@ app.get("/health", (req, res) => {
 });
 
 app.get("/version", (req, res) => {
-  res.json({
+  res.status(200).json({
     version: process.env.APP_VERSION || "development"
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
+
+module.exports = app;
