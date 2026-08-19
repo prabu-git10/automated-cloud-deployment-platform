@@ -2,13 +2,16 @@ FROM node:24-alpine
 
 WORKDIR /app
 
-# Update npm to the latest npm 11 release
-RUN npm install -g npm@11.19.0
-
+# Copy dependency files
 COPY package*.json ./
 
+# Install production dependencies
 RUN npm ci --omit=dev
 
+# Remove npm from the runtime image
+RUN npm uninstall -g npm
+
+# Copy application
 COPY server.js ./
 
 EXPOSE 5000
