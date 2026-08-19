@@ -4,9 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-  "start": "node server.js",
-  "test": "jest --runInBand"
-},
+    "start": "node server.js",
+    "test": "jest --runInBand"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
@@ -16,5 +16,9 @@
   "devDependencies": {
     "jest": "^30.4.2",
     "supertest": "^7.2.2"
+  },
+  "overrides": {
+    "brace-expansion": "5.0.9",
+    "ip-address": "10.3.1"
   }
 }
