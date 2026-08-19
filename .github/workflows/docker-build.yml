@@ -18,29 +18,66 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1. Checkout source code
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # 2. Inspect GitHub OIDC claims
+      # This helps us identify exactly what GitHub sends to AWS.
+      # No OIDC token itself is printed.
+      - name: Inspect OIDC claims
+        shell: bash
+        run: |
+          RESPONSE=$(curl -s \
+            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com")
+
+          TOKEN=$(echo "$RESPONSE" | jq -r '.value')
+
+          PAYLOAD=$(echo "$TOKEN" | cut -d '.' -f 2)
+
+          # Add base64 padding if necessary
+          case $((${#PAYLOAD} % 4)) in
+            2) PAYLOAD="${PAYLOAD}==" ;;
+            3) PAYLOAD="${PAYLOAD}=" ;;
+          esac
+
+          echo "$PAYLOAD" | base64 -d 2>/dev/null | jq '{
+            iss,
+            sub,
+            aud,
+            ref,
+            repository,
+            repository_id,
+            repository_owner,
+            repository_owner_id
+          }'
+
+      # 3. Configure AWS credentials using GitHub OIDC
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::036215883813:role/GitHubActions-ECR-CloudOps
-          aws-region: ap-south-1
+          aws-region: ${{ env.AWS_REGION }}
 
+      # 4. Login to Amazon ECR
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
+      # 5. Create image tag from Git commit SHA
       - name: Set image tag
         id: image
         run: echo "tag=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
 
+      # 6. Build Docker image
       - name: Build Docker image
         run: |
           docker build \
             -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.image.outputs.tag }} \
             ./app/backend
 
+      # 7. Push image to Amazon ECR
       - name: Push Docker image to ECR
         run: |
           docker push \
