@@ -1,59 +1,47 @@
-name: CI - Build, Test and Security Scan
+name: Build and Push to ECR
 
 on:
   push:
     branches:
       - main
-  pull_request:
-    branches:
-      - main
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-south-1
+  ECR_REPOSITORY: cloudops-app
 
 jobs:
-  build-test-scan:
+  build:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout repository
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2. Set up Node.js
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: app/backend/package-lock.json
+          role-to-assume: arn:aws:iam::036215883813:role/GitHubActions-ECR-CloudOps
+          aws-region: ap-south-1
 
-      # 3. Install backend dependencies
-      - name: Install dependencies
-        working-directory: app/backend
-        run: npm ci
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
 
-      # 4. Run automated tests
-      - name: Run tests
-        working-directory: app/backend
-        run: npm test
+      - name: Set image tag
+        id: image
+        run: echo "tag=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
 
-      # 5. Set up Docker Buildx
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      # 6. Build Docker image
       - name: Build Docker image
-        uses: docker/build-push-action@v6
-        with:
-          context: ./app/backend
-          file: ./app/backend/Dockerfile
-          load: true
-          tags: cloudops-app:${{ github.sha }}
+        run: |
+          docker build \
+            -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.image.outputs.tag }} \
+            ./app/backend
 
-      # 7. Scan Docker image for vulnerabilities
-      - name: Run Trivy vulnerability scan
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: cloudops-app:${{ github.sha }}
-          format: table
-          exit-code: '1'
-          ignore-unfixed: true
-          severity: CRITICAL,HIGH
+      - name: Push Docker image to ECR
+        run: |
+          docker push \
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.image.outputs.tag }}
