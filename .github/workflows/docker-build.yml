@@ -51,15 +51,6 @@ jobs:
 
       # --------------------------------------------------
       # 4. Generate unique immutable image tag
-      #
-      # SHA + Run Number + Run Attempt
-      #
-      # Example:
-      # 8ba04236...-14-1
-      # 8ba04236...-14-2
-      #
-      # This prevents ECR immutable-tag conflicts
-      # when a workflow is re-run.
       # --------------------------------------------------
       - name: Generate image tag
         run: |
@@ -89,12 +80,6 @@ jobs:
 
       # --------------------------------------------------
       # 6. Build Docker image
-      #
-      # Dockerfile location:
-      # app/backend/Dockerfile
-      #
-      # Build context:
-      # app/backend
       # --------------------------------------------------
       - name: Build Docker image
         run: |
@@ -119,7 +104,7 @@ jobs:
           severity: CRITICAL,HIGH
 
       # --------------------------------------------------
-      # 8. Push Docker image to Amazon ECR
+      # 8. Push Docker image to ECR
       # --------------------------------------------------
       - name: Push Docker image to ECR
         run: |
@@ -145,9 +130,32 @@ jobs:
             --region "$AWS_REGION"
 
       # --------------------------------------------------
-      # 10. Display final image information
+      # 10. Create deployment metadata
       # --------------------------------------------------
-      - name: Display image information
+      - name: Create deployment metadata
+        run: |
+          echo "IMAGE_TAG=$IMAGE_TAG" > deployment.env
+          echo "IMAGE=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> deployment.env
+
+          echo "========================================"
+          echo "Deployment Metadata"
+          echo "========================================"
+
+          cat deployment.env
+
+      # --------------------------------------------------
+      # 11. Upload exact image information as artifact
+      # --------------------------------------------------
+      - name: Upload deployment metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-metadata
+          path: deployment.env
+
+      # --------------------------------------------------
+      # 12. Final result
+      # --------------------------------------------------
+      - name: Display final image information
         run: |
           echo "========================================"
           echo "BUILD SUCCESSFUL"

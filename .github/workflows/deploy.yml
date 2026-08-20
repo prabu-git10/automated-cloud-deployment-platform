@@ -1,0 +1,319 @@
+name: Deploy CloudOps Application
+
+on:
+  workflow_run:
+    workflows:
+      - "Docker Build and Push"
+    types:
+      - completed
+
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "ECR image tag to deploy"
+        required: true
+        type: string
+
+env:
+  AWS_REGION: ap-south-1
+  ECR_REGISTRY: 036215883813.dkr.ecr.ap-south-1.amazonaws.com
+  ECR_REPOSITORY: cloudops-app
+  EC2_INSTANCE_ID: i-0ddd8569ec485af53
+
+permissions:
+  id-token: write
+  contents: read
+  actions: read
+
+jobs:
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+
+    steps:
+
+      # --------------------------------------------------
+      # 1. Checkout repository
+      # --------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # --------------------------------------------------
+      # 2. Configure AWS credentials using GitHub OIDC
+      # --------------------------------------------------
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::036215883813:role/GitHubActions-ECR-CloudOps
+          aws-region: ${{ env.AWS_REGION }}
+
+      # --------------------------------------------------
+      # 3. Verify AWS identity
+      # --------------------------------------------------
+      - name: Verify AWS identity
+        run: |
+          echo "========================================"
+          echo "AWS Identity"
+          echo "========================================"
+
+          aws sts get-caller-identity
+
+      # --------------------------------------------------
+      # 4. Download deployment metadata from
+      #    the successful Docker Build workflow
+      # --------------------------------------------------
+      - name: Download deployment metadata
+        if: github.event_name == 'workflow_run'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runId = context.payload.workflow_run.id;
+
+            console.log(`Downloading artifact from workflow run: ${runId}`);
+
+            const artifacts =
+              await github.rest.actions.listWorkflowRunArtifacts({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: runId
+              });
+
+            const artifact = artifacts.data.artifacts.find(
+              artifact => artifact.name === "deployment-metadata"
+            );
+
+            if (!artifact) {
+              core.setFailed(
+                "deployment-metadata artifact was not found."
+              );
+              return;
+            }
+
+            console.log(`Found artifact: ${artifact.name}`);
+            console.log(`Artifact ID: ${artifact.id}`);
+
+            const response =
+              await github.rest.actions.downloadArtifact({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                artifact_id: artifact.id,
+                archive_format: "zip"
+              });
+
+            const fs = require("fs");
+
+            fs.writeFileSync(
+              "/tmp/deployment-metadata.zip",
+              Buffer.from(response.data)
+            );
+
+            console.log("Artifact downloaded successfully.");
+
+      # --------------------------------------------------
+      # 5. Extract deployment metadata
+      # --------------------------------------------------
+      - name: Extract deployment metadata
+        if: github.event_name == 'workflow_run'
+        run: |
+          echo "========================================"
+          echo "Extracting Deployment Metadata"
+          echo "========================================"
+
+          mkdir -p deployment-metadata
+
+          unzip -o \
+            /tmp/deployment-metadata.zip \
+            -d deployment-metadata
+
+          echo "Metadata contents:"
+          cat deployment-metadata/deployment.env
+
+          source deployment-metadata/deployment.env
+
+          echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      # --------------------------------------------------
+      # 6. Manual deployment option
+      # --------------------------------------------------
+      - name: Set manual deployment image
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          IMAGE_TAG="${{ inputs.image_tag }}"
+
+          IMAGE="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+
+          echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      # --------------------------------------------------
+      # 7. Display exact image
+      # --------------------------------------------------
+      - name: Display deployment image
+        run: |
+          echo "========================================"
+          echo "Deployment Image"
+          echo "========================================"
+
+          echo "IMAGE TAG:"
+          echo "$IMAGE_TAG"
+
+          echo "FULL IMAGE:"
+          echo "$IMAGE"
+
+      # --------------------------------------------------
+      # 8. Verify image exists in ECR
+      # --------------------------------------------------
+      - name: Verify image exists in ECR
+        run: |
+          echo "========================================"
+          echo "Checking ECR Image"
+          echo "========================================"
+
+          aws ecr describe-images \
+            --repository-name "$ECR_REPOSITORY" \
+            --image-ids imageTag="$IMAGE_TAG" \
+            --region "$AWS_REGION"
+
+      # --------------------------------------------------
+      # 9. Send deployment command to EC2 through SSM
+      # --------------------------------------------------
+      - name: Deploy to EC2 through SSM
+        run: |
+
+          echo "========================================"
+          echo "Starting EC2 Deployment"
+          echo "========================================"
+
+          echo "Image:"
+          echo "$IMAGE"
+
+          echo "EC2 Instance:"
+          echo "$EC2_INSTANCE_ID"
+
+          echo "Sending deployment command to AWS Systems Manager..."
+
+          COMMAND_ID=$(aws ssm send-command \
+            --region "$AWS_REGION" \
+            --instance-ids "$EC2_INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --comment "Deploy CloudOps image $IMAGE_TAG" \
+            --parameters "commands=[
+              \"set -e\",
+              \"echo 'Starting deployment...'\",
+              \"echo 'Logging in to ECR...'\",
+              \"aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY\",
+              \"echo 'Pulling image...'\",
+              \"docker pull $IMAGE\",
+              \"echo 'Stopping old container...'\",
+              \"docker stop cloudops-app || true\",
+              \"echo 'Removing old container...'\",
+              \"docker rm cloudops-app || true\",
+              \"echo 'Starting new container...'\",
+              \"docker run -d --name cloudops-app -p 5000:5000 $IMAGE\",
+              \"echo 'Waiting for application...'\",
+              \"sleep 5\",
+              \"echo 'Running health check...'\",
+              \"curl --fail http://localhost:5000/health\",
+              \"echo 'Deployment successful!'\"
+            ]" \
+            --query "Command.CommandId" \
+            --output text)
+
+          echo "COMMAND_ID=$COMMAND_ID" >> "$GITHUB_ENV"
+
+          echo "========================================"
+          echo "SSM Command ID"
+          echo "========================================"
+
+          echo "$COMMAND_ID"
+
+      # --------------------------------------------------
+      # 10. Wait for SSM deployment
+      # --------------------------------------------------
+      - name: Wait for deployment
+        run: |
+
+          echo "========================================"
+          echo "Waiting for EC2 Deployment"
+          echo "========================================"
+
+          for i in {1..30}; do
+
+            STATUS=$(aws ssm get-command-invocation \
+              --region "$AWS_REGION" \
+              --command-id "$COMMAND_ID" \
+              --instance-id "$EC2_INSTANCE_ID" \
+              --query "Status" \
+              --output text)
+
+            echo "Deployment status: $STATUS"
+
+            if [ "$STATUS" = "Success" ]; then
+              echo "Deployment completed successfully."
+              exit 0
+            fi
+
+            if [ "$STATUS" = "Failed" ] || \
+               [ "$STATUS" = "Cancelled" ] || \
+               [ "$STATUS" = "TimedOut" ]; then
+
+              echo "Deployment failed."
+
+              echo "----- STDOUT -----"
+
+              aws ssm get-command-invocation \
+                --region "$AWS_REGION" \
+                --command-id "$COMMAND_ID" \
+                --instance-id "$EC2_INSTANCE_ID" \
+                --query "StandardOutputContent" \
+                --output text
+
+              echo "----- STDERR -----"
+
+              aws ssm get-command-invocation \
+                --region "$AWS_REGION" \
+                --command-id "$COMMAND_ID" \
+                --instance-id "$EC2_INSTANCE_ID" \
+                --query "StandardErrorContent" \
+                --output text
+
+              exit 1
+            fi
+
+            sleep 5
+
+          done
+
+          echo "Deployment timed out."
+          exit 1
+
+      # --------------------------------------------------
+      # 11. Final deployment result
+      # --------------------------------------------------
+      - name: Display deployment result
+        if: always()
+        run: |
+
+          echo "========================================"
+          echo "DEPLOYMENT RESULT"
+          echo "========================================"
+
+          if [ -n "${COMMAND_ID:-}" ]; then
+
+            aws ssm get-command-invocation \
+              --region "$AWS_REGION" \
+              --command-id "$COMMAND_ID" \
+              --instance-id "$EC2_INSTANCE_ID" \
+              --query "{Status:Status,Output:StandardOutputContent,Error:StandardErrorContent}" \
+              --output json
+
+          else
+
+            echo "No SSM command was created."
+
+          fi
