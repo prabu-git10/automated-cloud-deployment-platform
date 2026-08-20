@@ -40,9 +40,9 @@ jobs:
 
       # 4. Create immutable image tag
       - name: Set image tag
-        id: image
-        run: |
-          echo "tag=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+  id: image
+  run: |
+    echo "tag=${GITHUB_SHA}-${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
 
       # 5. Build Docker image
       - name: Build Docker image
