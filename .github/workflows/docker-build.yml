@@ -1,168 +1,151 @@
-name: Build, Scan, Push and Deploy
+name: Docker Build and Push
 
 on:
   push:
     branches:
       - main
 
-permissions:
-  id-token: write
-  contents: read
+  workflow_dispatch:
 
 env:
   AWS_REGION: ap-south-1
   ECR_REPOSITORY: cloudops-app
-  EC2_INSTANCE_ID: i-0ddd8569ec485af53
-  CONTAINER_NAME: cloudops-app
-  CONTAINER_PORT: 5000
+  ECR_REGISTRY: 036215883813.dkr.ecr.ap-south-1.amazonaws.com
+
+permissions:
+  id-token: write
+  contents: read
 
 jobs:
-  build-and-deploy:
+  docker-build:
+    name: Build, Scan and Push Docker Image
     runs-on: ubuntu-latest
 
     steps:
 
+      # --------------------------------------------------
       # 1. Checkout source code
-      - name: Checkout code
+      # --------------------------------------------------
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Configure AWS using GitHub OIDC
+      # --------------------------------------------------
+      # 2. Configure AWS credentials using GitHub OIDC
+      # --------------------------------------------------
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::036215883813:role/GitHubActions-ECR-CloudOps
           aws-region: ${{ env.AWS_REGION }}
 
-      # 3. Login to Amazon ECR
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      # 4. Create unique immutable image tag
-      - name: Set image tag
-        id: image
+      # --------------------------------------------------
+      # 3. Verify AWS identity
+      # --------------------------------------------------
+      - name: Verify AWS identity
         run: |
-          TAG="${GITHUB_SHA}-${GITHUB_RUN_NUMBER}"
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          echo "Docker image tag: ${TAG}"
+          echo "Checking AWS identity..."
+          aws sts get-caller-identity
 
-      # 5. Build Docker image
+      # --------------------------------------------------
+      # 4. Generate unique immutable image tag
+      #
+      # SHA + RUN_NUMBER + RUN_ATTEMPT
+      #
+      # Example:
+      # 8ba04236bf19...-13-1
+      # 8ba04236bf19...-13-2
+      # --------------------------------------------------
+      - name: Generate image tag
+        run: |
+          IMAGE_TAG="${GITHUB_SHA}-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
+
+          echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
+
+          echo "========================================"
+          echo "Docker Image Tag"
+          echo "========================================"
+          echo "$IMAGE_TAG"
+
+      # --------------------------------------------------
+      # 5. Login to Amazon ECR
+      # --------------------------------------------------
+      - name: Login to Amazon ECR
+        run: |
+          echo "Logging in to Amazon ECR..."
+
+          aws ecr get-login-password \
+            --region "$AWS_REGION" \
+            | docker login \
+            --username AWS \
+            --password-stdin "$ECR_REGISTRY"
+
+      # --------------------------------------------------
+      # 6. Build Docker image
+      # --------------------------------------------------
       - name: Build Docker image
         run: |
-          docker build \
-            -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.image.outputs.tag }} \
-            ./app/backend
+          echo "========================================"
+          echo "Building Docker Image"
+          echo "========================================"
 
-      # 6. Scan Docker image with Trivy
-      - name: Scan Docker image with Trivy
+          docker build \
+            -t "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
+            .
+
+      # --------------------------------------------------
+      # 7. Run Trivy security scan
+      # --------------------------------------------------
+      - name: Run Trivy vulnerability scan
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: '${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.image.outputs.tag }}'
+          image-ref: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
           format: table
           exit-code: '1'
           ignore-unfixed: true
           severity: CRITICAL,HIGH
 
-      # 7. Push Docker image to ECR
+      # --------------------------------------------------
+      # 8. Push image to Amazon ECR
+      # --------------------------------------------------
       - name: Push Docker image to ECR
         run: |
+          echo "========================================"
+          echo "Pushing Docker Image to Amazon ECR"
+          echo "========================================"
+
           docker push \
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.image.outputs.tag }}
+            "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
 
-      # 8. Deploy to EC2 using SSM
-      - name: Deploy to EC2 using SSM
-        id: deploy
-        shell: bash
+      # --------------------------------------------------
+      # 9. Verify image exists in ECR
+      # --------------------------------------------------
+      - name: Verify image in ECR
         run: |
-
-          IMAGE="${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.image.outputs.tag }}"
-
           echo "========================================"
-          echo "Starting EC2 deployment"
-          echo "========================================"
-          echo "Image: $IMAGE"
-          echo "EC2 Instance: ${{ env.EC2_INSTANCE_ID }}"
-
-          # Create valid JSON for AWS SSM
-          PARAMETERS=$(jq -n \
-            --arg image "$IMAGE" \
-            --arg region "${{ env.AWS_REGION }}" \
-            --arg registry "${{ steps.login-ecr.outputs.registry }}" \
-            '{
-              commands: [
-                "set -e",
-                "echo Starting deployment...",
-                "echo Logging in to ECR...",
-                ("aws ecr get-login-password --region " + $region + " | docker login --username AWS --password-stdin " + $registry),
-                "echo Pulling new Docker image...",
-                ("docker pull " + $image),
-                "echo Stopping old container...",
-                "docker stop cloudops-app || true",
-                "echo Removing old container...",
-                "docker rm cloudops-app || true",
-                "echo Starting new container...",
-                ("docker run -d --name cloudops-app -p 5000:5000 " + $image),
-                "echo Waiting for application startup...",
-                "sleep 5",
-                "echo Running health check...",
-                "curl --fail http://localhost:5000/health",
-                "echo Deployment successful!"
-              ]
-            }')
-
-          echo "Sending deployment command to AWS Systems Manager..."
-
-          COMMAND_ID=$(aws ssm send-command \
-            --instance-ids "${{ env.EC2_INSTANCE_ID }}" \
-            --document-name "AWS-RunShellScript" \
-            --comment "Deploy CloudOps image ${GITHUB_SHA}-${GITHUB_RUN_NUMBER}" \
-            --parameters "$PARAMETERS" \
-            --query "Command.CommandId" \
-            --output text)
-
-          echo "SSM Command ID: $COMMAND_ID"
-
-          echo "Waiting for EC2 deployment..."
-
-          aws ssm wait command-executed \
-            --command-id "$COMMAND_ID" \
-            --instance-id "${{ env.EC2_INSTANCE_ID }}"
-
-          STATUS=$(aws ssm get-command-invocation \
-            --command-id "$COMMAND_ID" \
-            --instance-id "${{ env.EC2_INSTANCE_ID }}" \
-            --query "Status" \
-            --output text)
-
-          echo "========================================"
-          echo "Deployment status: $STATUS"
+          echo "Verifying ECR Image"
           echo "========================================"
 
-          echo ""
-          echo "========== EC2 OUTPUT =========="
+          aws ecr describe-images \
+            --repository-name "$ECR_REPOSITORY" \
+            --image-ids imageTag="$IMAGE_TAG" \
+            --region "$AWS_REGION"
 
-          aws ssm get-command-invocation \
-            --command-id "$COMMAND_ID" \
-            --instance-id "${{ env.EC2_INSTANCE_ID }}" \
-            --query "StandardOutputContent" \
-            --output text
-
-          echo ""
-          echo "========== EC2 ERRORS =========="
-
-          aws ssm get-command-invocation \
-            --command-id "$COMMAND_ID" \
-            --instance-id "${{ env.EC2_INSTANCE_ID }}" \
-            --query "StandardErrorContent" \
-            --output text
-
-          echo ""
-
-          if [ "$STATUS" != "Success" ]; then
-            echo "❌ EC2 deployment failed!"
-            exit 1
-          fi
-
+      # --------------------------------------------------
+      # 10. Display final image
+      # --------------------------------------------------
+      - name: Display image information
+        run: |
           echo "========================================"
-          echo "✅ EC2 deployment completed successfully!"
+          echo "BUILD SUCCESSFUL"
+          echo "========================================"
+
+          echo "Repository:"
+          echo "$ECR_REGISTRY/$ECR_REPOSITORY"
+
+          echo "Image Tag:"
+          echo "$IMAGE_TAG"
+
+          echo "Full Image:"
+          echo "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+
           echo "========================================"
