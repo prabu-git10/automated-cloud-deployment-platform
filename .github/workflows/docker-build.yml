@@ -21,7 +21,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout
+
+      # 1. Checkout source code
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -32,7 +33,7 @@ jobs:
           role-to-assume: arn:aws:iam::036215883813:role/GitHubActions-ECR-CloudOps
           aws-region: ${{ env.AWS_REGION }}
 
-      # 3. Login to ECR
+      # 3. Login to Amazon ECR
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
@@ -40,7 +41,8 @@ jobs:
       # 4. Create immutable image tag
       - name: Set image tag
         id: image
-        run: echo "tag=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "tag=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
 
       # 5. Build Docker image
       - name: Build Docker image
@@ -49,7 +51,7 @@ jobs:
             -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.image.outputs.tag }} \
             ./app/backend
 
-      # 6. Trivy security scan
+      # 6. Scan Docker image with Trivy
       - name: Scan Docker image with Trivy
         uses: aquasecurity/trivy-action@master
         with:
@@ -59,58 +61,66 @@ jobs:
           ignore-unfixed: true
           severity: 'CRITICAL,HIGH'
 
-      # 7. Push image to ECR
+      # 7. Push Docker image to ECR
       - name: Push Docker image to ECR
         run: |
           docker push \
             ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.image.outputs.tag }}
 
-      # 8. Deploy to EC2 through SSM
+      # 8. Deploy to EC2 using AWS Systems Manager
       - name: Deploy to EC2 using SSM
         id: deploy
+        shell: bash
         run: |
+
           IMAGE="${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.image.outputs.tag }}"
+
+          echo "========================================"
+          echo "Starting EC2 deployment"
+          echo "========================================"
+          echo "Image: $IMAGE"
+          echo "EC2: ${{ env.EC2_INSTANCE_ID }}"
+
+          # Build valid JSON for SSM commands
+          PARAMETERS=$(jq -n \
+            --arg image "$IMAGE" \
+            --arg region "${{ env.AWS_REGION }}" \
+            --arg registry "${{ steps.login-ecr.outputs.registry }}" \
+            '{
+              commands: [
+                "set -e",
+                "echo Starting deployment...",
+                ("echo Logging in to ECR..."),
+                ("aws ecr get-login-password --region " + $region + " | docker login --username AWS --password-stdin " + $registry),
+                "echo Pulling new Docker image...",
+                ("docker pull " + $image),
+                "echo Stopping old container...",
+                "docker stop cloudops-app || true",
+                "echo Removing old container...",
+                "docker rm cloudops-app || true",
+                "echo Starting new container...",
+                ("docker run -d --name cloudops-app -p 5000:5000 " + $image),
+                "echo Waiting for application startup...",
+                "sleep 5",
+                "echo Running health check...",
+                "curl --fail http://localhost:5000/health",
+                "echo Deployment successful!"
+              ]
+            }')
+
+          echo "Sending deployment command to AWS Systems Manager..."
 
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "${{ env.EC2_INSTANCE_ID }}" \
             --document-name "AWS-RunShellScript" \
             --comment "Deploy CloudOps image ${GITHUB_SHA}" \
-            --parameters commands="
-              set -e
-              echo 'Starting deployment...'
-
-              echo 'Logging in to ECR...'
-              aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}
-
-              echo 'Pulling image...'
-              docker pull $IMAGE
-
-              echo 'Stopping old container...'
-              docker stop ${{ env.CONTAINER_NAME }} || true
-
-              echo 'Removing old container...'
-              docker rm ${{ env.CONTAINER_NAME }} || true
-
-              echo 'Starting new container...'
-              docker run -d \
-                --name ${{ env.CONTAINER_NAME }} \
-                -p ${{ env.CONTAINER_PORT }}:${{ env.CONTAINER_PORT }} \
-                $IMAGE
-
-              echo 'Waiting for application...'
-              sleep 5
-
-              echo 'Running health check...'
-              curl --fail http://localhost:${{ env.CONTAINER_PORT }}/health
-
-              echo 'Deployment successful!'
-            " \
+            --parameters "$PARAMETERS" \
             --query "Command.CommandId" \
             --output text)
 
           echo "SSM Command ID: $COMMAND_ID"
 
-          echo "Waiting for deployment..."
+          echo "Waiting for EC2 deployment to complete..."
 
           aws ssm wait command-executed \
             --command-id "$COMMAND_ID" \
@@ -122,16 +132,35 @@ jobs:
             --query "Status" \
             --output text)
 
+          echo "========================================"
           echo "Deployment status: $STATUS"
+          echo "========================================"
+
+          echo ""
+          echo "========== EC2 OUTPUT =========="
+
+          aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "${{ env.EC2_INSTANCE_ID }}" \
+            --query "StandardOutputContent" \
+            --output text
+
+          echo ""
+          echo "========== EC2 ERRORS =========="
+
+          aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "${{ env.EC2_INSTANCE_ID }}" \
+            --query "StandardErrorContent" \
+            --output text
+
+          echo ""
 
           if [ "$STATUS" != "Success" ]; then
-            echo "Deployment failed!"
-            aws ssm get-command-invocation \
-              --command-id "$COMMAND_ID" \
-              --instance-id "${{ env.EC2_INSTANCE_ID }}" \
-              --query "StandardErrorContent" \
-              --output text
+            echo "❌ EC2 deployment failed!"
             exit 1
           fi
 
-          echo "Deployment completed successfully!"
+          echo "========================================"
+          echo "✅ EC2 deployment completed successfully!"
+          echo "========================================"
