@@ -38,11 +38,13 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      # 4. Create immutable image tag
+      # 4. Create unique immutable image tag
       - name: Set image tag
-  id: image
-  run: |
-    echo "tag=${GITHUB_SHA}-${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+        id: image
+        run: |
+          TAG="${GITHUB_SHA}-${GITHUB_RUN_NUMBER}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Docker image tag: ${TAG}"
 
       # 5. Build Docker image
       - name: Build Docker image
@@ -56,10 +58,10 @@ jobs:
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: '${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.image.outputs.tag }}'
-          format: 'table'
+          format: table
           exit-code: '1'
           ignore-unfixed: true
-          severity: 'CRITICAL,HIGH'
+          severity: CRITICAL,HIGH
 
       # 7. Push Docker image to ECR
       - name: Push Docker image to ECR
@@ -67,7 +69,7 @@ jobs:
           docker push \
             ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.image.outputs.tag }}
 
-      # 8. Deploy to EC2 using AWS Systems Manager
+      # 8. Deploy to EC2 using SSM
       - name: Deploy to EC2 using SSM
         id: deploy
         shell: bash
@@ -79,9 +81,9 @@ jobs:
           echo "Starting EC2 deployment"
           echo "========================================"
           echo "Image: $IMAGE"
-          echo "EC2: ${{ env.EC2_INSTANCE_ID }}"
+          echo "EC2 Instance: ${{ env.EC2_INSTANCE_ID }}"
 
-          # Build valid JSON for SSM commands
+          # Create valid JSON for AWS SSM
           PARAMETERS=$(jq -n \
             --arg image "$IMAGE" \
             --arg region "${{ env.AWS_REGION }}" \
@@ -90,7 +92,7 @@ jobs:
               commands: [
                 "set -e",
                 "echo Starting deployment...",
-                ("echo Logging in to ECR..."),
+                "echo Logging in to ECR...",
                 ("aws ecr get-login-password --region " + $region + " | docker login --username AWS --password-stdin " + $registry),
                 "echo Pulling new Docker image...",
                 ("docker pull " + $image),
@@ -113,14 +115,14 @@ jobs:
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "${{ env.EC2_INSTANCE_ID }}" \
             --document-name "AWS-RunShellScript" \
-            --comment "Deploy CloudOps image ${GITHUB_SHA}" \
+            --comment "Deploy CloudOps image ${GITHUB_SHA}-${GITHUB_RUN_NUMBER}" \
             --parameters "$PARAMETERS" \
             --query "Command.CommandId" \
             --output text)
 
           echo "SSM Command ID: $COMMAND_ID"
 
-          echo "Waiting for EC2 deployment to complete..."
+          echo "Waiting for EC2 deployment..."
 
           aws ssm wait command-executed \
             --command-id "$COMMAND_ID" \
