@@ -43,11 +43,23 @@ jobs:
       # --------------------------------------------------
       - name: Verify AWS identity
         run: |
-          echo "Checking AWS identity..."
+          echo "========================================"
+          echo "AWS Identity"
+          echo "========================================"
+
           aws sts get-caller-identity
 
       # --------------------------------------------------
       # 4. Generate unique immutable image tag
+      #
+      # SHA + Run Number + Run Attempt
+      #
+      # Example:
+      # 8ba04236...-14-1
+      # 8ba04236...-14-2
+      #
+      # This prevents ECR immutable-tag conflicts
+      # when a workflow is re-run.
       # --------------------------------------------------
       - name: Generate image tag
         run: |
@@ -65,7 +77,9 @@ jobs:
       # --------------------------------------------------
       - name: Login to Amazon ECR
         run: |
-          echo "Logging in to Amazon ECR..."
+          echo "========================================"
+          echo "Logging in to Amazon ECR"
+          echo "========================================"
 
           aws ecr get-login-password \
             --region "$AWS_REGION" \
@@ -74,7 +88,13 @@ jobs:
             --password-stdin "$ECR_REGISTRY"
 
       # --------------------------------------------------
-      # 6. Build Docker image from backend folder
+      # 6. Build Docker image
+      #
+      # Dockerfile location:
+      # app/backend/Dockerfile
+      #
+      # Build context:
+      # app/backend
       # --------------------------------------------------
       - name: Build Docker image
         run: |
@@ -84,7 +104,7 @@ jobs:
 
           docker build \
             -t "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
-            ./backend
+            ./app/backend
 
       # --------------------------------------------------
       # 7. Run Trivy vulnerability scan
@@ -99,7 +119,7 @@ jobs:
           severity: CRITICAL,HIGH
 
       # --------------------------------------------------
-      # 8. Push Docker image to ECR
+      # 8. Push Docker image to Amazon ECR
       # --------------------------------------------------
       - name: Push Docker image to ECR
         run: |
@@ -111,12 +131,12 @@ jobs:
             "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
 
       # --------------------------------------------------
-      # 9. Verify image in ECR
+      # 9. Verify image exists in ECR
       # --------------------------------------------------
       - name: Verify image in ECR
         run: |
           echo "========================================"
-          echo "Verifying ECR Image"
+          echo "Verifying Image in ECR"
           echo "========================================"
 
           aws ecr describe-images \
@@ -133,13 +153,13 @@ jobs:
           echo "BUILD SUCCESSFUL"
           echo "========================================"
 
-          echo "Repository:"
+          echo "ECR Repository:"
           echo "$ECR_REGISTRY/$ECR_REPOSITORY"
 
           echo "Image Tag:"
           echo "$IMAGE_TAG"
 
-          echo "Full Image:"
+          echo "Full Docker Image:"
           echo "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
 
           echo "========================================"
