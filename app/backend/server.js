@@ -6,8 +6,10 @@ const PORT = process.env.PORT || 5000;
 
 app.get("/", (req, res) => {
   res.status(200).json({
-    message: "CloudOps Dashboard API - CI/CD Deployment Successful"
-  });
+  "message": "CloudOps Dashboard API",
+  "version": "v2.0",
+  "status": "Deployed Successfully"
+});
 });
 
 app.get("/health", (req, res) => {
