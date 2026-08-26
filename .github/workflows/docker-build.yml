@@ -9,8 +9,9 @@ on:
 
 env:
   AWS_REGION: ap-south-1
-  ECR_REPOSITORY: cloudops-app
   ECR_REGISTRY: 036215883813.dkr.ecr.ap-south-1.amazonaws.com
+  BACKEND_REPOSITORY: cloudops-app
+  FRONTEND_REPOSITORY: cloudops-frontend
 
 permissions:
   id-token: write
@@ -18,7 +19,7 @@ permissions:
 
 jobs:
   docker-build:
-    name: Build, Scan and Push Docker Image
+    name: Build, Scan and Push Application Images
     runs-on: ubuntu-latest
 
     steps:
@@ -59,8 +60,9 @@ jobs:
           echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
 
           echo "========================================"
-          echo "Docker Image Tag"
+          echo "IMAGE TAG"
           echo "========================================"
+
           echo "$IMAGE_TAG"
 
       # --------------------------------------------------
@@ -79,72 +81,118 @@ jobs:
             --password-stdin "$ECR_REGISTRY"
 
       # --------------------------------------------------
-      # 6. Build Docker image
+      # 6. Build backend image
       # --------------------------------------------------
-      - name: Build Docker image
+      - name: Build backend Docker image
         run: |
           echo "========================================"
-          echo "Building Docker Image"
+          echo "BUILDING BACKEND IMAGE"
           echo "========================================"
 
           docker build \
-            -t "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
+            -t "$ECR_REGISTRY/$BACKEND_REPOSITORY:$IMAGE_TAG" \
             ./app/backend
 
       # --------------------------------------------------
-      # 7. Run Trivy vulnerability scan
+      # 7. Scan backend image
       # --------------------------------------------------
-      - name: Run Trivy vulnerability scan
+      - name: Scan backend image with Trivy
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+          image-ref: ${{ env.ECR_REGISTRY }}/${{ env.BACKEND_REPOSITORY }}:${{ env.IMAGE_TAG }}
           format: table
           exit-code: '1'
           ignore-unfixed: true
           severity: CRITICAL,HIGH
 
       # --------------------------------------------------
-      # 8. Push Docker image to ECR
+      # 8. Push backend image
       # --------------------------------------------------
-      - name: Push Docker image to ECR
+      - name: Push backend image
         run: |
           echo "========================================"
-          echo "Pushing Docker Image to Amazon ECR"
+          echo "PUSHING BACKEND IMAGE"
           echo "========================================"
 
           docker push \
-            "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+            "$ECR_REGISTRY/$BACKEND_REPOSITORY:$IMAGE_TAG"
 
       # --------------------------------------------------
-      # 9. Verify image exists in ECR
+      # 9. Verify backend image
       # --------------------------------------------------
-      - name: Verify image in ECR
+      - name: Verify backend image
         run: |
-          echo "========================================"
-          echo "Verifying Image in ECR"
-          echo "========================================"
-
           aws ecr describe-images \
-            --repository-name "$ECR_REPOSITORY" \
+            --repository-name "$BACKEND_REPOSITORY" \
             --image-ids imageTag="$IMAGE_TAG" \
             --region "$AWS_REGION"
 
       # --------------------------------------------------
-      # 10. Create deployment metadata
+      # 10. Build frontend image
+      # --------------------------------------------------
+      - name: Build frontend Docker image
+        run: |
+          echo "========================================"
+          echo "BUILDING FRONTEND IMAGE"
+          echo "========================================"
+
+          docker build \
+            -t "$ECR_REGISTRY/$FRONTEND_REPOSITORY:$IMAGE_TAG" \
+            ./app/frontend
+
+      # --------------------------------------------------
+      # 11. Scan frontend image
+      # --------------------------------------------------
+      - name: Scan frontend image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPOSITORY }}:${{ env.IMAGE_TAG }}
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+
+      # --------------------------------------------------
+      # 12. Push frontend image
+      # --------------------------------------------------
+      - name: Push frontend image
+        run: |
+          echo "========================================"
+          echo "PUSHING FRONTEND IMAGE"
+          echo "========================================"
+
+          docker push \
+            "$ECR_REGISTRY/$FRONTEND_REPOSITORY:$IMAGE_TAG"
+
+      # --------------------------------------------------
+      # 13. Verify frontend image
+      # --------------------------------------------------
+      - name: Verify frontend image
+        run: |
+          aws ecr describe-images \
+            --repository-name "$FRONTEND_REPOSITORY" \
+            --image-ids imageTag="$IMAGE_TAG" \
+            --region "$AWS_REGION"
+
+      # --------------------------------------------------
+      # 14. Create deployment metadata
       # --------------------------------------------------
       - name: Create deployment metadata
         run: |
           echo "IMAGE_TAG=$IMAGE_TAG" > deployment.env
-          echo "IMAGE=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> deployment.env
+
+          echo "BACKEND_IMAGE=$ECR_REGISTRY/$BACKEND_REPOSITORY:$IMAGE_TAG" >> deployment.env
+
+          echo "FRONTEND_IMAGE=$ECR_REGISTRY/$FRONTEND_REPOSITORY:$IMAGE_TAG" >> deployment.env
 
           echo "========================================"
-          echo "Deployment Metadata"
+          echo "DEPLOYMENT METADATA"
           echo "========================================"
 
           cat deployment.env
 
       # --------------------------------------------------
-      # 11. Upload exact image information as artifact
+      # 15. Upload deployment metadata
       # --------------------------------------------------
       - name: Upload deployment metadata
         uses: actions/upload-artifact@v4
@@ -153,7 +201,7 @@ jobs:
           path: deployment.env
 
       # --------------------------------------------------
-      # 12. Final result
+      # 16. Final result
       # --------------------------------------------------
       - name: Display final image information
         run: |
@@ -161,13 +209,10 @@ jobs:
           echo "BUILD SUCCESSFUL"
           echo "========================================"
 
-          echo "ECR Repository:"
-          echo "$ECR_REGISTRY/$ECR_REPOSITORY"
+          echo "Backend:"
+          echo "$ECR_REGISTRY/$BACKEND_REPOSITORY:$IMAGE_TAG"
 
-          echo "Image Tag:"
-          echo "$IMAGE_TAG"
-
-          echo "Full Docker Image:"
-          echo "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          echo "Frontend:"
+          echo "$ECR_REGISTRY/$FRONTEND_REPOSITORY:$IMAGE_TAG"
 
           echo "========================================"

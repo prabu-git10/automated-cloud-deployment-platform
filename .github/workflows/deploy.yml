@@ -17,7 +17,8 @@ on:
 env:
   AWS_REGION: ap-south-1
   ECR_REGISTRY: 036215883813.dkr.ecr.ap-south-1.amazonaws.com
-  ECR_REPOSITORY: cloudops-app
+  BACKEND_REPOSITORY: cloudops-app
+  FRONTEND_REPOSITORY: cloudops-frontend
   EC2_INSTANCE_ID: i-0ddd8569ec485af53
 
 permissions:
@@ -27,7 +28,7 @@ permissions:
 
 jobs:
   deploy:
-    name: Deploy to EC2
+    name: Deploy Frontend and Backend to EC2
     runs-on: ubuntu-latest
 
     if: >
@@ -63,8 +64,7 @@ jobs:
           aws sts get-caller-identity
 
       # --------------------------------------------------
-      # 4. Download deployment metadata from
-      #    the successful Docker Build workflow
+      # 4. Download deployment metadata
       # --------------------------------------------------
       - name: Download deployment metadata
         if: github.event_name == 'workflow_run'
@@ -135,91 +135,135 @@ jobs:
           source deployment-metadata/deployment.env
 
           echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
-          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          echo "BACKEND_IMAGE=$BACKEND_IMAGE" >> "$GITHUB_ENV"
+          echo "FRONTEND_IMAGE=$FRONTEND_IMAGE" >> "$GITHUB_ENV"
 
       # --------------------------------------------------
       # 6. Manual deployment option
       # --------------------------------------------------
-      - name: Set manual deployment image
+      - name: Set manual deployment images
         if: github.event_name == 'workflow_dispatch'
         run: |
           IMAGE_TAG="${{ inputs.image_tag }}"
 
-          IMAGE="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          BACKEND_IMAGE="$ECR_REGISTRY/$BACKEND_REPOSITORY:$IMAGE_TAG"
+          FRONTEND_IMAGE="$ECR_REGISTRY/$FRONTEND_REPOSITORY:$IMAGE_TAG"
 
           echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
-          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          echo "BACKEND_IMAGE=$BACKEND_IMAGE" >> "$GITHUB_ENV"
+          echo "FRONTEND_IMAGE=$FRONTEND_IMAGE" >> "$GITHUB_ENV"
 
       # --------------------------------------------------
-      # 7. Display exact image
+      # 7. Display deployment images
       # --------------------------------------------------
-      - name: Display deployment image
+      - name: Display deployment images
         run: |
           echo "========================================"
-          echo "Deployment Image"
+          echo "DEPLOYMENT IMAGES"
           echo "========================================"
 
           echo "IMAGE TAG:"
           echo "$IMAGE_TAG"
 
-          echo "FULL IMAGE:"
-          echo "$IMAGE"
+          echo ""
+          echo "BACKEND IMAGE:"
+          echo "$BACKEND_IMAGE"
+
+          echo ""
+          echo "FRONTEND IMAGE:"
+          echo "$FRONTEND_IMAGE"
 
       # --------------------------------------------------
-      # 8. Verify image exists in ECR
+      # 8. Verify backend image exists
       # --------------------------------------------------
-      - name: Verify image exists in ECR
+      - name: Verify backend image exists
         run: |
           echo "========================================"
-          echo "Checking ECR Image"
+          echo "VERIFYING BACKEND IMAGE"
           echo "========================================"
 
           aws ecr describe-images \
-            --repository-name "$ECR_REPOSITORY" \
+            --repository-name "$BACKEND_REPOSITORY" \
             --image-ids imageTag="$IMAGE_TAG" \
             --region "$AWS_REGION"
 
       # --------------------------------------------------
-      # 9. Send deployment command to EC2 through SSM
+      # 9. Verify frontend image exists
       # --------------------------------------------------
-      - name: Deploy to EC2 through SSM
+      - name: Verify frontend image exists
+        run: |
+          echo "========================================"
+          echo "VERIFYING FRONTEND IMAGE"
+          echo "========================================"
+
+          aws ecr describe-images \
+            --repository-name "$FRONTEND_REPOSITORY" \
+            --image-ids imageTag="$IMAGE_TAG" \
+            --region "$AWS_REGION"
+
+      # --------------------------------------------------
+      # 10. Deploy both containers through SSM
+      # --------------------------------------------------
+      - name: Deploy application to EC2 through SSM
         run: |
 
           echo "========================================"
-          echo "Starting EC2 Deployment"
+          echo "STARTING EC2 DEPLOYMENT"
           echo "========================================"
 
-          echo "Image:"
-          echo "$IMAGE"
+          echo "Backend:"
+          echo "$BACKEND_IMAGE"
 
+          echo ""
+          echo "Frontend:"
+          echo "$FRONTEND_IMAGE"
+
+          echo ""
           echo "EC2 Instance:"
           echo "$EC2_INSTANCE_ID"
 
+          echo ""
           echo "Sending deployment command to AWS Systems Manager..."
 
           COMMAND_ID=$(aws ssm send-command \
             --region "$AWS_REGION" \
             --instance-ids "$EC2_INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
-            --comment "Deploy CloudOps image $IMAGE_TAG" \
+            --comment "Deploy frontend and backend $IMAGE_TAG" \
             --parameters "commands=[
               \"set -e\",
-              \"echo 'Starting deployment...'\",
+              \"echo '========================================'\",
+              \"echo 'Starting CloudOps deployment...'\",
+              \"echo '========================================'\",
               \"echo 'Logging in to ECR...'\",
               \"aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY\",
-              \"echo 'Pulling image...'\",
-              \"docker pull $IMAGE\",
-              \"echo 'Stopping old container...'\",
+              \"echo 'Creating Docker network...'\",
+              \"docker network create cloudops-network || true\",
+              \"echo 'Pulling backend image...'\",
+              \"docker pull $BACKEND_IMAGE\",
+              \"echo 'Pulling frontend image...'\",
+              \"docker pull $FRONTEND_IMAGE\",
+              \"echo 'Stopping old frontend container...'\",
+              \"docker stop cloudops-frontend || true\",
+              \"echo 'Removing old frontend container...'\",
+              \"docker rm cloudops-frontend || true\",
+              \"echo 'Stopping old backend container...'\",
               \"docker stop cloudops-app || true\",
-              \"echo 'Removing old container...'\",
+              \"echo 'Removing old backend container...'\",
               \"docker rm cloudops-app || true\",
-              \"echo 'Starting new container...'\",
-             \"docker run -d --name cloudops-app -p 5000:5000 -e AWS_REGION=$AWS_REGION -e AWS_S3_BUCKET=clouddrive-prabu-file-storage $IMAGE\",
-              \"echo 'Waiting for application...'\",
-              \"sleep 5\",
-              \"echo 'Running health check...'\",
+              \"echo 'Starting backend container...'\",
+              \"docker run -d --name cloudops-app --network cloudops-network -p 5000:5000 -e AWS_REGION=$AWS_REGION -e AWS_S3_BUCKET=clouddrive-prabu-file-storage $BACKEND_IMAGE\",
+              \"echo 'Starting frontend container...'\",
+              \"docker run -d --name cloudops-frontend --network cloudops-network -p 8080:80 $FRONTEND_IMAGE\",
+              \"echo 'Waiting for applications...'\",
+              \"sleep 8\",
+              \"echo 'Checking backend health...'\",
               \"curl --fail http://localhost:5000/health\",
-              \"echo 'Deployment successful!'\"
+              \"echo 'Checking frontend...'\",
+              \"curl --fail http://localhost:8080/\",
+              \"echo '========================================'\",
+              \"echo 'DEPLOYMENT SUCCESSFUL'\",
+              \"echo '========================================'\"
             ]" \
             --query "Command.CommandId" \
             --output text)
@@ -227,19 +271,19 @@ jobs:
           echo "COMMAND_ID=$COMMAND_ID" >> "$GITHUB_ENV"
 
           echo "========================================"
-          echo "SSM Command ID"
+          echo "SSM COMMAND ID"
           echo "========================================"
 
           echo "$COMMAND_ID"
 
       # --------------------------------------------------
-      # 10. Wait for SSM deployment
+      # 11. Wait for deployment
       # --------------------------------------------------
       - name: Wait for deployment
         run: |
 
           echo "========================================"
-          echo "Waiting for EC2 Deployment"
+          echo "WAITING FOR EC2 DEPLOYMENT"
           echo "========================================"
 
           for i in {1..30}; do
@@ -293,7 +337,7 @@ jobs:
           exit 1
 
       # --------------------------------------------------
-      # 11. Final deployment result
+      # 12. Final deployment result
       # --------------------------------------------------
       - name: Display deployment result
         if: always()
