@@ -1,111 +1,1123 @@
-:root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+/* ================================
+   Global Reset
+================================ */
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
-
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
-  color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-
-  @media (max-width: 1024px) {
-    font-size: 16px;
-  }
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-  }
-
-  #social .button-icon {
-    filter: invert(1) brightness(2);
-  }
-}
-
-body {
+* {
   margin: 0;
-}
-
-#root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
+  padding: 0;
   box-sizing: border-box;
 }
 
-h1,
-h2 {
-  font-family: var(--heading);
-  font-weight: 500;
-  color: var(--text-h);
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100%;
 }
 
-h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
-  }
-}
-h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
-  }
-}
-p {
-  margin: 0;
+body {
+  font-family: Arial, Helvetica, sans-serif;
+  background: #0f1117;
+  color: #f5f7fa;
 }
 
-code,
-.counter {
-  font-family: var(--mono);
-  display: inline-flex;
-  border-radius: 4px;
-  color: var(--text-h);
+a {
+  text-decoration: none;
+  color: inherit;
 }
 
-code {
+button,
+input {
+  font: inherit;
+}
+
+/* ================================
+   Main Application Layout
+================================ */
+
+.app-layout {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+}
+
+/* ================================
+   Sidebar
+================================ */
+
+.sidebar {
+  width: 250px;
+  min-height: 100vh;
+  background: #171a21;
+  border-right: 1px solid #292d36;
+
+  display: flex;
+  flex-direction: column;
+
+  padding: 24px 16px;
+}
+
+/* ================================
+   Sidebar Logo
+================================ */
+
+.sidebar-logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  padding: 0 10px;
+  margin-bottom: 40px;
+}
+
+.logo-icon {
+  width: 40px;
+  height: 40px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 10px;
+  background: #2563eb;
+}
+
+.sidebar-logo h2 {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+/* ================================
+   Sidebar Navigation
+================================ */
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+
+  padding: 12px 14px;
+  border-radius: 9px;
+
+  color: #aeb6c5;
   font-size: 15px;
-  line-height: 135%;
-  padding: 4px 8px;
-  background: var(--code-bg);
+
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.nav-item:hover {
+  background: #222631;
+  color: #ffffff;
+}
+
+.nav-item.active {
+  background: #252b38;
+  color: #ffffff;
+}
+
+/* ================================
+   Sidebar Bottom
+================================ */
+
+.sidebar-bottom {
+  margin-top: auto;
+}
+
+/* ================================
+   Main Content
+================================ */
+
+.main-content {
+  flex: 1;
+  min-width: 0;
+
+  padding: 32px 40px;
+}
+
+.main-content h1 {
+  font-size: 32px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.main-content p {
+  color: #929aaa;
+  font-size: 15px;
+}
+/* ================================
+   Navbar
+================================ */
+
+.navbar {
+  width: 100%;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  margin-bottom: 36px;
+}
+
+.search-box {
+  width: 360px;
+
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  padding: 11px 15px;
+
+  background: #171a21;
+  border: 1px solid #292d36;
+  border-radius: 10px;
+
+  color: #8f98a8;
+}
+
+.search-box input {
+  width: 100%;
+
+  border: none;
+  outline: none;
+
+  background: transparent;
+  color: #ffffff;
+
+  font-size: 14px;
+}
+
+.search-box input::placeholder {
+  color: #737c8c;
+}
+
+.navbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.icon-button {
+  width: 40px;
+  height: 40px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border: 1px solid #292d36;
+  border-radius: 9px;
+
+  background: #171a21;
+  color: #aeb6c5;
+
+  cursor: pointer;
+}
+
+.icon-button:hover {
+  background: #222631;
+  color: #ffffff;
+}
+
+.user-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.user-profile svg {
+  color: #8f98a8;
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.user-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.user-role {
+  font-size: 12px;
+  color: #737c8c;
+}
+/* ================================
+   Dashboard
+================================ */
+
+.dashboard-heading {
+  margin-bottom: 28px;
+}
+
+.dashboard-heading h1 {
+  font-size: 32px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.dashboard-heading p {
+  color: #929aaa;
+  font-size: 15px;
+}
+
+/* ================================
+   Storage Card
+================================ */
+
+.storage-card {
+  max-width: 520px;
+
+  padding: 22px;
+
+  background: #171a21;
+  border: 1px solid #292d36;
+  border-radius: 14px;
+}
+
+.storage-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  margin-bottom: 20px;
+}
+
+.storage-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.storage-title svg {
+  color: #8f98a8;
+}
+
+.storage-percentage {
+  font-size: 14px;
+  color: #8f98a8;
+}
+
+.storage-info {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+
+  margin-bottom: 14px;
+}
+
+.storage-info strong {
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.storage-info span {
+  font-size: 13px;
+  color: #737c8c;
+}
+
+.storage-track {
+  width: 100%;
+  height: 8px;
+
+  background: #292d36;
+  border-radius: 999px;
+
+  overflow: hidden;
+}
+
+.storage-progress {
+  height: 100%;
+
+  background: #2563eb;
+  border-radius: inherit;
+
+  transition: width 0.3s ease;
+}
+
+.storage-description {
+  margin-top: 12px;
+
+  font-size: 12px;
+  color: #737c8c;
+}
+/* ================================
+   Folders Section
+================================ */
+
+.folders-section {
+  margin-top: 32px;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  margin-bottom: 16px;
+}
+
+.section-header h2 {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.view-all-button {
+  border: none;
+  background: transparent;
+  color: #6ea8ff;
+
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.view-all-button:hover {
+  color: #ffffff;
+}
+
+/* ================================
+   Folder Grid
+================================ */
+
+.folders-grid {
+  display: grid;
+
+  grid-template-columns: repeat(4, 1fr);
+
+  gap: 16px;
+}
+
+/* ================================
+   Folder Card
+================================ */
+
+.folder-card {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+
+  padding: 18px;
+
+  background: #171a21;
+  border: 1px solid #292d36;
+  border-radius: 12px;
+
+  cursor: pointer;
+
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.folder-card:hover {
+  background: #1d212a;
+  border-color: #3a414e;
+  transform: translateY(-2px);
+}
+
+.folder-icon {
+  width: 42px;
+  height: 42px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 10px;
+
+  background: #222631;
+  color: #6ea8ff;
+
+  flex-shrink: 0;
+}
+
+.folder-info {
+  min-width: 0;
+}
+
+.folder-info h3 {
+  font-size: 14px;
+  font-weight: 600;
+
+  margin-bottom: 5px;
+
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.folder-info span {
+  font-size: 12px;
+  color: #737c8c;
+}
+/* ================================
+   Files Section
+================================ */
+
+.files-section {
+  margin-top: 36px;
+  margin-bottom: 40px;
+}
+
+.file-table {
+  width: 100%;
+
+  background: #171a21;
+  border: 1px solid #292d36;
+  border-radius: 14px;
+
+  overflow: visible;
+}
+
+.file-table-header,
+.file-row {
+  display: grid;
+
+  grid-template-columns:
+    minmax(250px, 2fr)
+    1fr
+    1fr
+    1.2fr
+    50px;
+
+  align-items: center;
+}
+
+.file-table-header {
+  padding: 14px 18px;
+
+  background: #1b1f27;
+
+  color: #737c8c;
+
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.file-row {
+  padding: 15px 18px;
+
+  border-top: 1px solid #292d36;
+
+  color: #c5cad4;
+
+  font-size: 13px;
+
+  transition: background 0.2s ease;
+}
+
+.file-row:hover {
+  background: #1d212a;
+}
+
+/* ================================
+   File Name
+================================ */
+
+.file-name {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  min-width: 0;
+}
+
+.file-name span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-icon {
+  width: 36px;
+  height: 36px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 8px;
+
+  background: #222631;
+  color: #6ea8ff;
+
+  flex-shrink: 0;
+}
+
+/* ================================
+   File Information
+================================ */
+
+.file-type,
+.file-size,
+.file-date {
+  color: #8f98a8;
+}
+
+/* ================================
+   File Action
+================================ */
+
+.file-action {
+  width: 34px;
+  height: 34px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border: none;
+  border-radius: 8px;
+
+  background: transparent;
+
+  color: #737c8c;
+
+  cursor: pointer;
+}
+
+.file-action:hover {
+  background: #292d36;
+  color: #ffffff;
+}
+/* ================================
+   Upload Button
+================================ */
+
+.dashboard-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  margin-bottom: 28px;
+}
+
+.upload-main-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  padding: 11px 17px;
+
+  border: none;
+  border-radius: 9px;
+
+  background: #2563eb;
+  color: #ffffff;
+
+  font-size: 14px;
+  font-weight: 600;
+
+  cursor: pointer;
+
+  transition: background 0.2s ease;
+}
+
+.upload-main-button:hover {
+  background: #1d4ed8;
+}
+
+/* ================================
+   Modal Overlay
+================================ */
+
+.modal-overlay {
+  position: fixed;
+
+  inset: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 20px;
+
+  background: rgba(0, 0, 0, 0.65);
+
+  z-index: 1000;
+}
+
+/* ================================
+   Upload Modal
+================================ */
+
+.upload-modal {
+  width: 100%;
+  max-width: 520px;
+
+  background: #171a21;
+  border: 1px solid #292d36;
+  border-radius: 16px;
+
+  padding: 24px;
+
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+}
+
+.modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+
+  margin-bottom: 24px;
+}
+
+.modal-header h2 {
+  font-size: 20px;
+  margin-bottom: 6px;
+}
+
+.modal-header p {
+  color: #737c8c;
+  font-size: 13px;
+}
+
+.modal-close {
+  width: 36px;
+  height: 36px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border: none;
+  border-radius: 8px;
+
+  background: transparent;
+  color: #8f98a8;
+
+  cursor: pointer;
+}
+
+.modal-close:hover {
+  background: #252a34;
+  color: #ffffff;
+}
+
+/* ================================
+   Upload Area
+================================ */
+
+.upload-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+
+  padding: 35px 20px;
+
+  border: 1px dashed #3a414e;
+  border-radius: 12px;
+
+  text-align: center;
+}
+
+.upload-icon {
+  width: 56px;
+  height: 56px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  margin-bottom: 15px;
+
+  border-radius: 12px;
+
+  background: #222631;
+  color: #6ea8ff;
+}
+
+.upload-area h3 {
+  font-size: 15px;
+  margin-bottom: 6px;
+}
+
+.upload-area p {
+  color: #737c8c;
+  font-size: 13px;
+  margin-bottom: 18px;
+}
+
+.browse-button {
+  padding: 9px 15px;
+
+  border-radius: 8px;
+
+  background: #252b38;
+  color: #ffffff;
+
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.browse-button:hover {
+  background: #303744;
+}
+
+/* ================================
+   Selected File
+================================ */
+
+.selected-file {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  margin-top: 18px;
+  padding: 13px;
+
+  background: #1d212a;
+  border-radius: 9px;
+
+  color: #6ea8ff;
+}
+
+.selected-file div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.selected-file span {
+  color: #ffffff;
+  font-size: 13px;
+}
+
+.selected-file small {
+  color: #737c8c;
+  font-size: 11px;
+}
+
+/* ================================
+   Modal Actions
+================================ */
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+
+  margin-top: 24px;
+}
+
+.cancel-button,
+.upload-button {
+  padding: 10px 16px;
+
+  border-radius: 8px;
+
+  font-size: 13px;
+  font-weight: 600;
+
+  cursor: pointer;
+}
+
+.cancel-button {
+  border: 1px solid #292d36;
+  background: transparent;
+  color: #aeb6c5;
+}
+
+.cancel-button:hover {
+  background: #222631;
+}
+
+.upload-button {
+  border: none;
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.upload-button:hover {
+  background: #1d4ed8;
+}
+/* ================================
+   File Action Menu
+================================ */
+
+.file-action-wrapper {
+  position: relative;
+
+  display: flex;
+  justify-content: center;
+}
+
+.file-menu {
+  position: absolute;
+
+  top: 38px;
+  right: 0;
+
+  width: 150px;
+
+  padding: 6px;
+
+  background: #1b1f27;
+
+  border: 1px solid #292d36;
+  border-radius: 10px;
+
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+
+  z-index: 100;
+}
+
+.file-menu button {
+  width: 100%;
+
+  display: flex;
+  align-items: center;
+
+  gap: 10px;
+
+  padding: 9px 10px;
+
+  border: none;
+  border-radius: 7px;
+
+  background: transparent;
+
+  color: #c5cad4;
+
+  font-size: 13px;
+
+  text-align: left;
+
+  cursor: pointer;
+}
+
+.file-menu button:hover {
+  background: #252a34;
+  color: #ffffff;
+}
+
+.file-menu .delete-action {
+  color: #ef6b73;
+}
+
+.file-menu .delete-action:hover {
+  background: #302126;
+  color: #ff858c;
+}
+.no-files {
+  padding: 40px 20px;
+  text-align: center;
+  color: #737c8c;
+  font-size: 14px;
+}
+/* ========================================
+   Responsive Design
+======================================== */
+
+/* ================================
+   Tablet
+================================ */
+
+@media (max-width: 900px) {
+
+  .sidebar {
+    width: 210px;
+    padding: 20px 12px;
+  }
+
+  .main-content {
+    padding: 28px 24px;
+  }
+
+  .folders-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .search-box {
+    width: 280px;
+  }
+
+}
+
+
+/* ================================
+   Mobile
+================================ */
+
+@media (max-width: 650px) {
+
+  .sidebar {
+    width: 72px;
+    padding: 20px 8px;
+  }
+
+  /* Hide sidebar text */
+  .sidebar-logo {
+    justify-content: center;
+    padding: 0;
+  }
+
+  .sidebar-logo h2 {
+    display: none;
+  }
+
+  .nav-item {
+    justify-content: center;
+    padding: 12px 8px;
+  }
+
+  .nav-item span {
+    display: none;
+  }
+
+  .sidebar-nav {
+    gap: 8px;
+  }
+
+  .main-content {
+    width: calc(100% - 72px);
+    padding: 20px 16px;
+  }
+
+  /* Navbar */
+
+  .navbar {
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+
+  .search-box {
+    width: auto;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .navbar-actions {
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .user-info {
+    display: none;
+  }
+
+  .icon-button {
+    width: 38px;
+    height: 38px;
+  }
+
+  /* Dashboard heading */
+
+  .dashboard-heading {
+    align-items: flex-start;
+    gap: 15px;
+  }
+
+  .dashboard-heading h1 {
+    font-size: 26px;
+  }
+
+  .dashboard-heading p {
+    font-size: 13px;
+  }
+
+  .upload-main-button {
+    flex-shrink: 0;
+  }
+
+  /* Storage */
+
+  .storage-card {
+    max-width: 100%;
+    padding: 18px;
+  }
+
+  /* Folders */
+
+  .folders-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .folder-card {
+    padding: 16px;
+  }
+
+  /* Files */
+
+  .files-section {
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  .file-table {
+    min-width: 650px;
+  }
+
+}
+
+
+/* ================================
+   Small Mobile
+================================ */
+
+@media (max-width: 450px) {
+
+  .sidebar {
+    width: 64px;
+  }
+
+  .main-content {
+    width: calc(100% - 64px);
+    padding: 16px 12px;
+  }
+
+  .navbar {
+    gap: 8px;
+  }
+
+  .search-box {
+    padding: 9px 11px;
+  }
+
+  .search-box input {
+    font-size: 12px;
+  }
+
+  .navbar-actions {
+    gap: 5px;
+  }
+
+  .dashboard-heading {
+    flex-direction: column;
+  }
+
+  .dashboard-heading h1 {
+    font-size: 24px;
+  }
+
+  .upload-main-button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .storage-card {
+    padding: 16px;
+  }
+
+  .storage-info strong {
+    font-size: 22px;
+  }
+
+  .section-header h2 {
+    font-size: 17px;
+  }
+
 }

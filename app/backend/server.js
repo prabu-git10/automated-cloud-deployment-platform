@@ -1,33 +1,45 @@
 const express = require("express");
+const cors = require("cors");
+
+const fileRoutes = require("./routes/fileRoutes");
+const { testS3Connection } = require("./services/s3Service");
 
 const app = express();
+const PORT = 5000;
 
-const PORT = process.env.PORT || 5000;
+// Allow requests from the deployed React frontend
+app.use(
+  cors({
+    origin: [
+      "http://localhost:5173",
+      "http://15.252.146.163",
+    ],
+  })
+);
 
-app.get("/", (req, res) => {
-  res.status(200).json({
-  "message": "CloudOps Dashboard API",
-  "version": "v2.0",
-  "status": "Deployed Successfully"
-});
-});
+app.use(express.json());
 
+app.use("/api/files", fileRoutes);
+
+// Application health check
 app.get("/health", (req, res) => {
   res.status(200).json({
-    status: "healthy"
+    status: "healthy",
   });
 });
 
-app.get("/version", (req, res) => {
-  res.status(200).json({
-    version: process.env.APP_VERSION || "development"
+// Root endpoint
+app.get("/", (req, res) => {
+  res.json({
+    message: "Cloud File Storage API is running!",
   });
 });
 
-if (require.main === module) {
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-  });
-}
+// Start server
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
 
-module.exports = app;
+  testS3Connection().catch((error) => {
+    console.error("S3 connection test failed:", error);
+  });
+});
