@@ -57,7 +57,7 @@ function StorageBar({ refreshKey }) {
 
         <div className="storage-title">
           <HardDrive size={20} />
-          <span>Storage</span>
+          <span>Storge</span>
         </div>
 
         <span className="storage-percentage">
